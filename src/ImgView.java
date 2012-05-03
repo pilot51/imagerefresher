@@ -23,7 +23,8 @@ import org.apache.http.util.EntityUtils;
 public class ImgView extends JComponent {
 	private static final long serialVersionUID = 1L;
 	private String address, user, pass;
-	private Image img;
+	protected Image img;
+	protected int scaledWidth, scaledHeight;
 	private Thread thread;
 	private Scanner in = new Scanner(System.in);
 	private HttpClient httpclient;
@@ -43,7 +44,23 @@ public class ImgView extends JComponent {
 	
 	public void paintComponent(Graphics g) {
 		super.paintComponent(g);
-		g.drawImage(img, 0, 0, null);
+		if (img == null) return;
+		else if (scaledWidth == 0 | scaledHeight == 0) {
+			scaledWidth = getSize().width;
+			scaledHeight = getSize().height;
+		}
+		g.drawImage(img, 0, 0, scaledWidth, scaledHeight, null);
+	}
+	
+	protected void aspect(int width, int height) {
+		float ratio = (float)img.getWidth(null) / (float)img.getHeight(null);
+		if (width > height * ratio) {
+			scaledWidth = Math.round(height * ratio);
+			scaledHeight = height;
+		} else if (height > width / ratio) {
+			scaledWidth = width;
+			scaledHeight = Math.round(width / ratio);
+		}
 	}
 	
 	private void run() {

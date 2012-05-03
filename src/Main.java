@@ -1,3 +1,5 @@
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 
@@ -16,6 +18,7 @@ public class Main extends JFrame {
 		super("ImageRefresher");
 		imgView = new ImgView();
 		add(imgView);
+		addComponentListener(new ResizeListener());
 		setSize(642, 510);
 		setVisible(true);
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -24,5 +27,13 @@ public class Main extends JFrame {
 		        isRunning = false;
 		    }
 		});
+	}
+	
+	class ResizeListener extends ComponentAdapter {
+		public void componentResized(ComponentEvent e) {
+			if (imgView.img == null) return;
+			imgView.aspect(getWidth() - 2, getHeight() - 30);
+			setSize(imgView.scaledWidth + 2, imgView.scaledHeight + 30);
+		}
 	}
 }
