@@ -18,6 +18,7 @@ public class Main extends JFrame {
 		super("ImageRefresher");
 		imgView = new ImgView();
 		add(imgView);
+		setJMenuBar(imgView.menuBar);
 		addComponentListener(new ResizeListener());
 		setSize(642, 510);
 		setVisible(true);
