@@ -2,9 +2,15 @@ import java.awt.Graphics;
 import java.awt.Image;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.Scanner;
 
 import javax.imageio.ImageIO;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.SourceDataLine;
 import javax.swing.JComponent;
 
 import org.apache.http.HttpResponse;
@@ -83,6 +89,37 @@ public class ImgView extends JComponent {
 			}
 		});
 		thread.start();
+		new Thread(new Runnable() {
+			@Override
+			public void run() {
+				while (Main.isRunning) {
+					try {
+						audio();
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+			}
+		}).start();
+	}
+	
+	private void audio() throws Exception {
+		AudioInputStream stream = AudioSystem.getAudioInputStream(new URL(address + "/audio.cgi"));
+		AudioFormat format = stream.getFormat();
+		DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
+		SourceDataLine line = (SourceDataLine) AudioSystem.getLine(info);
+		line.open(format);
+		line.start();
+		int numRead = 0;
+		byte[] buf = new byte[line.getBufferSize()];
+		while ((numRead = stream.read(buf, 0, buf.length)) >= 0) {
+			int offset = 0;
+			while (offset < numRead) {
+				offset += line.write(buf, offset, numRead - offset);
+			}
+		}
+		line.drain();
+		line.stop();
 	}
 	
 	private void setRequest() {
@@ -90,7 +127,7 @@ public class ImgView extends JComponent {
 			httpclient = new DefaultHttpClient();
 			httpclient.getParams().setParameter(CoreProtocolPNames.PROTOCOL_VERSION, HttpVersion.HTTP_1_1);
 		}
-		request = new HttpGet(address);
+		request = new HttpGet(address + "/image.jpg");
 		request.setHeader("User-Agent", "ImageRefresher");
 		if (user != null | pass != null) {
 			try {
