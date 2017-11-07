@@ -6,9 +6,10 @@ import java.awt.event.KeyEvent;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.Authenticator;
+import java.net.PasswordAuthentication;
 import java.net.URL;
 
 import javax.imageio.ImageIO;
@@ -16,26 +17,15 @@ import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
+import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.JComponent;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.KeyStroke;
-
-import org.apache.http.HttpResponse;
-import org.apache.http.HttpStatus;
-import org.apache.http.HttpVersion;
-import org.apache.http.auth.AuthenticationException;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.auth.BasicScheme;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.params.CoreProtocolPNames;
-import org.apache.http.util.EntityUtils;
 
 public class ImgView extends JComponent {
 	private static final long serialVersionUID = 1L;
@@ -44,15 +34,12 @@ public class ImgView extends JComponent {
 	protected Image img;
 	protected int scaledWidth, scaledHeight;
 	private Thread thread;
-	private HttpClient httpclient;
-	private HttpGet request;
-	private HttpResponse response;
 
 	public ImgView() {
 		createMenu();
 		load();
 		if (address != null) {
-			setRequest();
+			setAuth();
 			run();
 		}
 	}
@@ -73,7 +60,7 @@ public class ImgView extends JComponent {
 					user = (String)JOptionPane.showInputDialog(ImgView.this, "Login: Username", "Connect", JOptionPane.QUESTION_MESSAGE);
 					pass = (String)JOptionPane.showInputDialog(ImgView.this, "Login: Password", "Connect", JOptionPane.QUESTION_MESSAGE);
 					save();
-					setRequest();
+					setAuth();
 					run();
 				}
 			}
@@ -82,7 +69,7 @@ public class ImgView extends JComponent {
 		menuBar.add(menu);
 	}
 	
-	public void paintComponent(Graphics g) {
+	protected void paintComponent(Graphics g) {
 		super.paintComponent(g);
 		if (img == null) return;
 		else if (scaledWidth == 0 | scaledHeight == 0) {
@@ -108,17 +95,8 @@ public class ImgView extends JComponent {
 		thread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				InputStream is;
 				while (Main.isRunning) {
-					is = fetch();
-					if (is != null) {
-						try {
-							img = ImageIO.read(is);
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-						repaint();
-					}
+					displayImage();
 				}
 			}
 		});
@@ -127,70 +105,51 @@ public class ImgView extends JComponent {
 			@Override
 			public void run() {
 				while (Main.isRunning) {
-					try {
-						audio();
-					} catch (Exception e) {
-						e.printStackTrace();
-					}
+					playAudioStream();
 				}
 			}
 		}).start();
 	}
 	
-	private void audio() throws Exception {
-		AudioInputStream stream = AudioSystem.getAudioInputStream(new URL(address + "/audio.cgi"));
-		AudioFormat format = stream.getFormat();
-		DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
-		SourceDataLine line = (SourceDataLine) AudioSystem.getLine(info);
-		line.open(format);
-		line.start();
-		int numRead = 0;
-		byte[] buf = new byte[line.getBufferSize()];
-		while ((numRead = stream.read(buf, 0, buf.length)) >= 0) {
-			int offset = 0;
-			while (offset < numRead) {
-				offset += line.write(buf, offset, numRead - offset);
-			}
-		}
-		line.drain();
-		line.stop();
-	}
-	
-	private void setRequest() {
-		if (httpclient == null) {
-			httpclient = new DefaultHttpClient();
-			httpclient.getParams().setParameter(CoreProtocolPNames.PROTOCOL_VERSION, HttpVersion.HTTP_1_1);
-		}
-		request = new HttpGet(address + "/image.jpg");
-		request.setHeader("User-Agent", "ImageRefresher");
+	private void setAuth() {
 		if (user != null | pass != null) {
-			try {
-				request.addHeader(new BasicScheme().authenticate(
-					new UsernamePasswordCredentials(user, pass), request));
-			} catch (AuthenticationException e) {
-				e.printStackTrace();
-			}
+			Authenticator.setDefault(new Auth(user, pass));
 		}
 	}
 	
-	private InputStream fetch() {
+	private void displayImage() {
 		try {
-			response = httpclient.execute(request);
-			if (response.getStatusLine().getStatusCode() == HttpStatus.SC_OK)
-				return response.getEntity().getContent();
-		} catch (ClientProtocolException e) {
-			e.printStackTrace();
+			img = ImageIO.read(new URL(address + "/image.jpg"));
+			repaint();
 		} catch (IOException e) {
 			e.printStackTrace();
-		} catch (IllegalStateException e) {
-			try {
-				EntityUtils.consume(response.getEntity());
-			} catch (IOException e1) {
-				e1.printStackTrace();
+		}
+	}
+	
+	private void playAudioStream() {
+		SourceDataLine line = null;
+		try {
+			AudioInputStream stream = AudioSystem.getAudioInputStream(new URL(address + "/audio.cgi"));
+			AudioFormat format = stream.getFormat();
+			DataLine.Info info = new DataLine.Info(SourceDataLine.class, format);
+			line = (SourceDataLine)AudioSystem.getLine(info);
+			line.open(format);
+			line.start();
+			int numRead = 0;
+			byte[] buf = new byte[line.getBufferSize()];
+			while ((numRead = stream.read(buf, 0, buf.length)) >= 0) {
+				int offset = 0;
+				while (offset < numRead) {
+					offset += line.write(buf, offset, numRead - offset);
+				}
 			}
+		} catch (UnsupportedAudioFileException | LineUnavailableException | IOException e) {
 			e.printStackTrace();
 		}
-		return null;
+		if (line != null) {
+			line.drain();
+			line.stop();
+		}
 	}
 	
 	private void save() {
@@ -201,20 +160,33 @@ public class ImgView extends JComponent {
 			save.writeObject(pass);
 			save.flush();
 			save.close();
-		} catch (Exception exc) {
-			exc.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
 		}
 	}
 	
-	public void load() {
+	private void load() {
 		try {
 			ObjectInputStream save = new ObjectInputStream(new FileInputStream("imgrefresher.sav"));
 			address = (String)save.readObject();
 			user = (String)save.readObject();
 			pass = (String)save.readObject();
 			save.close();
-		} catch (Exception exc) {
-			exc.printStackTrace();
+		} catch (ClassNotFoundException | IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private static class Auth extends Authenticator {
+		private String username, password;
+		
+		private Auth(String user, String pass) {
+			username = user;
+			password = pass;
+		}
+		
+		protected PasswordAuthentication getPasswordAuthentication() {
+			return new PasswordAuthentication(username, password.toCharArray());
 		}
 	}
 }
