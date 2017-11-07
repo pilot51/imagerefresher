@@ -1,0 +1,5 @@
+ImageRefresher (needs a better name) is an IP camera viewer that streams a rapidly updated JPG image and audio.
+
+Currently, it has only been designed and tested to support KEEBOX IPC1000W and is unlikely to work with other brands.
+
+This project was intended for my own use and as such I do not intend to provide support outside of my own needs. It is open source just in case anyone else might find it useful.
